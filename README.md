@@ -1,5 +1,7 @@
 # endian
 
+[![CI](https://github.com/Kronuz/endian/actions/workflows/ci.yml/badge.svg)](https://github.com/Kronuz/endian/actions/workflows/ci.yml)
+
 A small, header-only, dependency-free **byte-order / endianness** library for
 C++20, extracted from [Xapiand](https://github.com/Kronuz/Xapiand).
 
