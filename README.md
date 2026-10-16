@@ -1,105 +1,82 @@
 # endian
 
 [![CI](https://github.com/Kronuz/endian/actions/workflows/ci.yml/badge.svg)](https://github.com/Kronuz/endian/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
+![Header-only](https://img.shields.io/badge/header--only-yes-green.svg)
 
-A small, header-only, dependency-free **byte-order / endianness** library for
-C++20, extracted from [Xapiand](https://github.com/Kronuz/Xapiand).
+Byte-order conversion that reads the same on every platform, in C++20:
+`htobe32`, `le64toh`, and friends from one header on Linux, macOS, FreeBSD, and
+Windows, plus 56-bit variants the system headers lack. For wire formats and
+on-disk layouts.
 
-## What it is
+![endian: one value laid out big-endian, little-endian, or as 7 bytes](docs/endian.svg)
 
-One header, `endian.hh`: a uniform set of byte-order conversion macros that work
-the same way on every platform. It maps the per-OS spellings (`<endian.h>` on
-Linux, `<machine/endian.h>` on macOS, `<sys/endian.h>` on FreeBSD, the MSVC
-intrinsics on Windows) onto one common surface, fills in anything the platform is
-missing with `__builtin_bswap*` (or a portable fallback), and adds a 56-bit
-(7-byte) variant that the standard headers don't provide. Nothing behind it but
-the system endian/byteswap headers.
+## ✨ Highlights
 
-The full set:
+- **One spelling everywhere**: maps `<endian.h>`, `<machine/endian.h>`,
+  `<sys/endian.h>`, and the MSVC intrinsics onto one set of names.
+- **The full set**: `bswap16/32/64`, `htobe*`/`be*toh`, `htole*`/`le*toh`.
+- **56-bit variants** (`htobe56`, `be56toh`, …) for 7-byte ids.
+- **Free at runtime**: macros that fold to one intrinsic, or to nothing.
 
-- **Raw swaps:** `bswap16`, `bswap32`, `bswap64`.
-- **Host to/from big-endian:** `htobe16/32/64`, `be16/32/64toh`.
-- **Host to/from little-endian:** `htole16/32/64`, `le16/32/64toh`.
-- **56-bit (7-byte):** `htobe56`, `htole56`, `be56toh`, `le56toh`, for ids that
-  live in 7 bytes (Xapiand uses these for HTM trixel ids).
+## 📦 Installation
 
-These are macros, not functions, so they fold away to a single intrinsic on the
-host. On a little-endian machine `htole32` is the identity and `htobe32` is a
-swap; on a big-endian machine it is the other way around. You write the same code
-either way.
-
-## Install
-
-CMake with `FetchContent`:
+Requires a C++20 compiler; CMake 3.14 or newer for the CMake route. CI builds it
+on Linux (x86_64, arm64), macOS (arm64, x86_64), and FreeBSD, plus ASan, UBSan,
+and TSan builds.
 
 ```cmake
 include(FetchContent)
-FetchContent_Declare(
-  endian
+FetchContent_Declare(endian
   GIT_REPOSITORY https://github.com/Kronuz/endian.git
-  GIT_TAG        main
-)
+  GIT_TAG        main)
 FetchContent_MakeAvailable(endian)
 
-target_link_libraries(your_target PRIVATE endian::endian)
+target_link_libraries(my_app PRIVATE endian::endian)
 ```
 
-The `endian` target is a pure `INTERFACE` library: it compiles nothing, requests
-`cxx_std_20`, and puts the header directory on your include path. Then:
+Or copy `endian.hh` onto your include path.
+
+## 🚀 Quick start
 
 ```cpp
 #include "endian.hh"
-```
 
-Requires C++20. On macOS it builds with AppleClang/libc++, the same toolchain
-Xapiand uses. The header keeps its original filename, so a codebase that already
-`#include "endian.hh"` just needs this repo on its include path.
-
-## Usage
-
-```cpp
-#include "endian.hh"
+#include <cassert>
 #include <cstdint>
 
-// Serialize a 32-bit value big-endian on the wire, decode it back:
-uint32_t v   = 0x11223344;
-uint32_t net = htobe32(v);     // bytes laid out 11 22 33 44 in memory
-uint32_t got = be32toh(net);   // back to host order; got == v
+int main() {
+	uint32_t wire = htobe32(0x11223344);       // bytes 11 22 33 44 in memory
+	assert(be32toh(wire) == 0x11223344);
 
-// Little-endian round-trip:
-uint64_t id  = 0x0123456789ABCDEFULL;
-uint64_t le  = htole64(id);
-uint64_t back = le64toh(le);   // back == id
-
-// 7-byte ids: the top byte always drops.
-uint64_t trixel = 0xFF123456789ABCDEULL;   // top 0xFF is noise
-uint64_t packed = htobe56(trixel);
-uint64_t orig   = be56toh(packed);          // 0x00123456789ABCDE
+	uint64_t id = 0xFF123456789ABCDEULL;       // only the low 7 bytes count
+	assert(be56toh(htobe56(id)) == 0x00123456789ABCDEULL);
+}
 ```
 
-`bswap16/32/64` give you the raw swap when you need it directly. The `hto*` /
-`*toh` macros are the ones to reach for: they do the right thing per host, so the
-call site stays platform-independent.
+## 🎯 When to use it
 
-## Build & test
+- ✅ Serializing integers in a fixed byte order across platforms.
+- ❌ C++23 code that only needs swaps: `std::byteswap` covers 16, 32, and 64 bits.
+
+## 📚 Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md): how each platform is mapped.
+- [AGENTS.md](AGENTS.md): repository map and traps.
+
+## 🛠️ Building and testing
 
 ```sh
 cmake -B build && cmake --build build && ctest --test-dir build
 ```
 
-The test checks the raw swaps against known byte patterns, round-trips every
-width through big- and little-endian, verifies the in-memory byte layout the
-conversions produce (independent of host endianness), and exercises the 56-bit
-helpers (including that the 8th byte is always dropped). It prints
-`all endian tests passed` and exits 0.
+## 🤝 Contributing
 
-## Provenance
+Issues and pull requests are welcome. Read [AGENTS.md](AGENTS.md) first. CI must
+pass on every platform.
 
-Extracted from [Xapiand](https://github.com/Kronuz/Xapiand). `endian.hh` had zero
-dependencies already (only the platform endian/byteswap headers), so it was
-copied verbatim, no decoupling delta. See [ARCHITECTURE.md](ARCHITECTURE.md) for
-the design and [AGENTS.md](AGENTS.md) for the repo map and invariants.
+## 📄 License
 
-## License
-
-MIT, Copyright (c) 2015-2018 Dubalu LLC. See [LICENSE](LICENSE).
+MIT, Copyright (c) 2015-2018 Dubalu LLC. See [LICENSE](LICENSE). Extracted from
+[Xapiand](https://github.com/Kronuz/Xapiand).

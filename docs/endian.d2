@@ -1,0 +1,16 @@
+# endian: one value, two byte orders, the same call on every host.
+# Render: d2 --layout elk --sketch --theme 302 docs/endian.d2 docs/endian.svg
+direction: right
+value: "0x11223344"
+be: big-endian {
+  label: "htobe32 → 11 22 33 44"
+}
+le: little-endian {
+  label: "htole32 → 44 33 22 11"
+}
+b56: 56-bit {
+  label: "htobe56: 7 bytes,\nthe top byte dropped"
+}
+value -> be
+value -> le
+value -> b56 {style.stroke-dash: 3}
