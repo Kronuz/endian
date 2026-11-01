@@ -20,14 +20,39 @@ Everything is header-only. There is no `.cc` to compile except the test. The
 CMake target is a pure `INTERFACE` library that only adds the source dir to the
 include path and requests `cxx_std_20`.
 
-## Build and run the test
+## Verification and benchmarks
+
+The shared method is the catalog's
+[PERFORMANCE.md](https://github.com/Kronuz/cpp-libraries/blob/main/docs/PERFORMANCE.md). From a
+fresh clone:
 
 ```sh
-cmake -B build && cmake --build build && ctest --test-dir build
+cmake -B build && cmake --build build && ctest --test-dir build --output-on-failure
 ```
 
-Expected output ends with `all endian tests passed`, exit 0. The test target is
-`endian_test`; the registered CTest name is `endian`.
+- **Test.** CTest `endian` (target `endian_test`, `test/test.cc`) checks the raw swaps, the
+  round-trips through every width, the bytes each conversion lays out in memory, and the 56-bit
+  helpers against a value with a noisy top byte. Its oracle is the host's byte order read from
+  the bytes of a known value with `memcpy`, independent of the macros under test. The checks are
+  `assert`s, so leave `NDEBUG` off (no build type, or Debug). Expected output ends with
+  `all endian tests passed`, exit 0.
+- **CI.** `.github/workflows/ci.yml` calls the catalog's shared
+  [`cmake.yml`](https://github.com/Kronuz/cpp-libraries/blob/main/.github/workflows/cmake.yml):
+  Linux x86_64 (GCC, Clang) and arm64 (GCC), macOS arm64 and x86_64, and FreeBSD (each takes a
+  different platform header path), at `-O2 -g` with asserts live, plus ASan+UBSan and TSan jobs
+  over the same test. All of them are little-endian, none is Windows, and every compiler has the
+  `__builtin_bswap*` builtins, so CI never compiles the `__BIG_ENDIAN` branch, the Windows branch
+  or the swap fallbacks of `endian.hh`. The ASan+UBSan job, on Linux:
+
+  ```sh
+  CC=clang CXX=clang++ cmake -B build-asan -DCMAKE_BUILD_TYPE=Debug \
+    "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -D_GLIBCXX_ASSERTIONS" \
+    -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
+  cmake --build build-asan && ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build-asan --output-on-failure
+  ```
+
+- **Not here.** No differential test, mutation script, fuzz target or benchmark, and no
+  performance claim: the macros resolve to the platform's own conversions or compiler builtins.
 
 ## Conventions
 
